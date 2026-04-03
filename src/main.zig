@@ -9,11 +9,13 @@ const session_mod = @import("session.zig");
 const render_svg = @import("render_svg.zig");
 const render_html = @import("render_html.zig");
 
+const build_options = @import("build_options");
+
 const Config = config_mod.Config;
 const Pty = pty_mod.Pty;
 const Terminal = terminal_mod.Terminal;
 
-const version = "0.1.0";
+const version = build_options.version;
 
 pub fn main() !void {
     var gpa_state: std.heap.GeneralPurposeAllocator(.{}) = .init;
