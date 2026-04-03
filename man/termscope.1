@@ -1,0 +1,204 @@
+.Dd $Mdocdate$
+.Dt TERMSCOPE 1
+.Os
+.Sh NAME
+.Nm termscope
+.Nd headless terminal emulator for programmatic TUI interaction
+.Sh SYNOPSIS
+.Nm
+.Cm snapshot
+.Op Fl -format Ar fmt
+.Op Fl o Ar path
+.Op Fl -cols Ar N
+.Op Fl -rows Ar N
+.Op Fl -wait-idle Ar ms
+.Fl - Ar cmd Op Ar args ...
+.Nm
+.Cm exec
+.Op Fl -wait-for-text Ar pattern
+.Op Fl -type Ar text
+.Op Fl -press Ar key
+.Op Fl -wait-idle Ar ms
+.Op Fl -snapshot
+.Op Fl -expect Ar text
+.Op Fl -timeout Ar ms
+.Fl - Ar cmd Op Ar args ...
+.Nm
+.Cm session
+.Op Fl -cols Ar N
+.Op Fl -rows Ar N
+.Fl - Ar cmd Op Ar args ...
+.Sh DESCRIPTION
+.Nm
+spawns a command in a virtual terminal powered by libghostty-vt,
+allowing programmatic interaction and state capture.
+It is designed for AI agents, CI pipelines, and TUI testing.
+.Pp
+Three subcommands are available:
+.Bl -tag -width indent
+.It Cm snapshot
+Launch a command, wait for output to settle, capture the terminal
+state, and print it to stdout.
+.It Cm exec
+Launch a command and execute a linear sequence of actions specified
+by flags, processed left to right.
+.It Cm session
+Launch a command and enter an interactive JSON-lines protocol session,
+reading requests from stdin and writing responses to stdout.
+See
+.Xr termscope-session 7
+for the protocol specification.
+.El
+.Sh GLOBAL OPTIONS
+.Bl -tag -width indent
+.It Fl -cols Ar N
+Terminal width in cells.
+Default: inherited from parent TTY, or 80.
+.It Fl -rows Ar N
+Terminal height in cells.
+Default: inherited from parent TTY, or 24.
+.It Fl -term Ar VALUE
+TERM environment variable for the child.
+Default:
+.Dq xterm-256color .
+.It Fl -theme Ar dark|light
+Color theme.
+Default:
+.Dq dark .
+.It Fl -env Ar KEY=VALUE
+Set an environment variable for the child process.
+May be specified multiple times.
+.It Fl -inherit-env
+Inherit the full parent environment instead of a curated subset.
+.It Fl -version
+Print version and exit.
+.It Fl -help
+Print usage and exit.
+.El
+.Sh SNAPSHOT OPTIONS
+.Bl -tag -width indent
+.It Fl -format Ar fmt
+Output format:
+.Dq text
+(default),
+.Dq spans ,
+.Dq json ,
+.Dq html ,
+.Dq svg .
+.It Fl o Ar path
+Write output to a file instead of stdout.
+.It Fl -wait-idle Ar ms
+Milliseconds of idle time before capturing.
+Default: 200.
+.El
+.Sh EXEC OPTIONS
+Processed left to right as a linear sequence of steps:
+.Bl -tag -width indent
+.It Fl -wait-for-text Ar pattern
+Block until
+.Ar pattern
+appears on the terminal screen.
+.It Fl -type Ar text
+Send
+.Ar text
+as keyboard input.
+.It Fl -press Ar key
+Send a key using Emacs notation.
+See
+.Sx KEY NOTATION .
+.It Fl -wait-idle Ar ms
+Wait for output to settle.
+.It Fl -snapshot
+Capture and print the terminal state.
+.It Fl -expect Ar text
+Assert
+.Ar text
+is present.
+Exit 0 if found, 1 if not.
+.It Fl -timeout Ar ms
+Set timeout for subsequent wait operations.
+Default: 30000.
+.El
+.Sh KEY NOTATION
+.Nm
+uses Emacs-style key notation:
+.Pp
+.Bl -tag -width "C-M-a" -compact
+.It C-c
+Ctrl+C
+.It M-x
+Alt+X
+.It C-M-a
+Ctrl+Alt+A
+.It RET
+Enter
+.It TAB
+Tab
+.It ESC
+Escape
+.It SPC
+Space
+.It DEL
+Backspace
+.It <up> <down> <left> <right>
+Arrow keys
+.It <home> <end>
+Home/End
+.It <prior> <next>
+Page Up/Down
+.It <f1> ... <f12>
+Function keys
+.El
+.Pp
+Key sequences are space-separated:
+.Dq C-x C-s
+means press Ctrl+X, then Ctrl+S.
+.Sh ENVIRONMENT
+.Bl -tag -width indent
+.It Ev TERM
+Set to
+.Fl -term
+value (default
+.Dq xterm-256color ) .
+.It Ev COLORTERM
+Set to
+.Dq truecolor .
+.It Ev TERM_PROGRAM
+Set to
+.Dq termscope .
+.El
+.Sh EXIT STATUS
+.Ex -std
+.Pp
+For
+.Cm exec
+with
+.Fl -expect ,
+exits 0 if the text is found, 1 if not.
+.Sh EXAMPLES
+Snapshot a TUI:
+.Bd -literal -offset indent
+termscope snapshot -- htop
+.Ed
+.Pp
+JSON snapshot with custom size:
+.Bd -literal -offset indent
+termscope snapshot --format json --cols 120 --rows 40 -- btop
+.Ed
+.Pp
+Interactive sequence:
+.Bd -literal -offset indent
+termscope exec \\
+  --wait-for-text "Search:" \\
+  --type "hello" \\
+  --press RET \\
+  --snapshot \\
+  -- my-tui
+.Ed
+.Pp
+CI assertion:
+.Bd -literal -offset indent
+termscope exec --expect "Error" -- my-app || echo "Error found"
+.Ed
+.Sh SEE ALSO
+.Xr termscope-session 7

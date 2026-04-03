@@ -1,0 +1,193 @@
+.Dd $Mdocdate$
+.Dt TERMSCOPE-SESSION 7
+.Os
+.Sh NAME
+.Nm termscope-session
+.Nd JSON-lines session protocol for termscope
+.Sh DESCRIPTION
+The
+.Nm termscope session
+command launches a child process in a virtual terminal and
+communicates via a JSON-lines protocol over stdin/stdout.
+This is the
+.Dq Playwright mode
+designed for AI agents driving terminal applications.
+.Pp
+Each request is a single JSON object on one line.
+Each response is a single JSON object on one line.
+Stderr is reserved for diagnostics and never carries protocol data.
+.Ss Request Format
+.Bd -literal -offset indent
+{"id": N, "method": "name", "params": {...}}
+.Ed
+.Pp
+.Ar id
+is a caller-chosen integer for correlating responses.
+.Ar method
+is the operation name.
+.Ar params
+is an optional object of method-specific parameters.
+.Ss Response Format
+.Bd -literal -offset indent
+{"id": N, "result": {...}}
+{"id": N, "error": {"code": "...", "message": "..."}}
+.Ed
+.Pp
+Errors do not terminate the session.
+The agent decides what to do next.
+.Ss Events
+When the child process exits on its own:
+.Bd -literal -offset indent
+{"event": "child_exit", "exit_code": N}
+.Ed
+.Pp
+After this event, stdout reaches EOF.
+.Sh METHODS
+.Ss snapshot
+Capture the current terminal state.
+.Bl -tag -width indent
+.It Ar format
+Output format:
+.Dq text
+(default),
+.Dq json .
+.El
+.Bd -literal -offset indent
+{"id":1,"method":"snapshot"}
+{"id":1,"method":"snapshot","params":{"format":"json"}}
+.Ed
+.Ss type
+Send text characters to the terminal.
+.Bl -tag -width indent
+.It Ar text
+The string to type.
+.El
+.Bd -literal -offset indent
+{"id":2,"method":"type","params":{"text":"hello"}}
+.Ed
+.Ss press
+Send a key using Emacs notation.
+.Bl -tag -width indent
+.It Ar key
+Key notation string.
+.El
+.Bd -literal -offset indent
+{"id":3,"method":"press","params":{"key":"RET"}}
+{"id":3,"method":"press","params":{"key":"C-x C-s"}}
+.Ed
+.Ss wait_for_text
+Block until a text pattern appears on the terminal screen.
+.Bl -tag -width indent
+.It Ar pattern
+Substring to search for.
+.It Ar timeout
+Timeout in milliseconds.
+Default: 30000.
+.El
+.Bd -literal -offset indent
+{"id":4,"method":"wait_for_text","params":{"pattern":"Ready"}}
+.Ed
+.Pp
+Returns
+.Ar found ,
+.Ar row ,
+and
+.Ar col
+on success, or an error with code
+.Dq timeout .
+.Ss wait_for_idle
+Wait until the terminal output has settled.
+.Bl -tag -width indent
+.It Ar duration
+Idle duration in milliseconds.
+Default: 200.
+.El
+.Bd -literal -offset indent
+{"id":5,"method":"wait_for_idle","params":{"duration":200}}
+.Ed
+.Ss wait_for_cursor
+Wait until the cursor reaches a specific position.
+.Bl -tag -width indent
+.It Ar row
+Target row (0-indexed).
+.It Ar col
+Target column (0-indexed).
+.It Ar timeout
+Timeout in milliseconds.
+Default: 30000.
+.El
+.Bd -literal -offset indent
+{"id":6,"method":"wait_for_cursor","params":{"row":0,"col":5}}
+.Ed
+.Ss query
+Get terminal metadata without capturing screen content.
+.Bd -literal -offset indent
+{"id":7,"method":"query"}
+.Ed
+.Pp
+Returns:
+.Ar cols ,
+.Ar rows ,
+.Ar cursor
+(as [row, col]),
+.Ar cursor_style ,
+.Ar cursor_visible ,
+.Ar title ,
+.Ar alt_screen .
+.Ss resize
+Change the terminal dimensions.
+.Bl -tag -width indent
+.It Ar cols
+New width in cells.
+.It Ar rows
+New height in cells.
+.El
+.Bd -literal -offset indent
+{"id":8,"method":"resize","params":{"cols":120,"rows":40}}
+.Ed
+.Ss close
+Terminate the child process and end the session.
+.Bd -literal -offset indent
+{"id":9,"method":"close"}
+.Ed
+.Pp
+Returns
+.Ar exit_code .
+.Sh SESSION LIFECYCLE
+The session starts when
+.Cm termscope session -- cmd
+launches.
+The child process runs immediately.
+.Pp
+The session ends when:
+.Bl -enum
+.It
+The agent sends
+.Dq close .
+.It
+The child process exits on its own (triggers a
+.Dq child_exit
+event).
+.It
+termscope receives SIGTERM or SIGINT.
+.El
+.Pp
+On SIGTERM/SIGINT, termscope sends SIGHUP to the child,
+waits up to 2 seconds, then SIGKILL.
+.Sh ERROR CODES
+.Bl -tag -width indent
+.It timeout
+A wait operation exceeded its timeout.
+.It invalid_params
+Required parameters are missing or invalid.
+.It invalid_key
+The key notation string could not be parsed.
+.It pty_error
+Failed to write to the PTY.
+.It parse_error
+The request JSON could not be parsed.
+.It unknown_method
+The method name is not recognized.
+.El
+.Sh SEE ALSO
+.Xr termscope 1
