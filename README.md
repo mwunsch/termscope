@@ -26,13 +26,25 @@ zig build -Doptimize=ReleaseSafe
 
 ## How It Works
 
-```mermaid
-flowchart LR
-    A["termscope CLI"] -->|forkpty| B["PTY"]
-    B -->|stdin/stdout| C["Child Process\n(your TUI)"]
-    B -->|byte stream| D["ghostty-vt\nTerminal Emulator"]
-    D -->|screen state| E["Snapshot\ntext / json / svg / html"]
-    A -->|"JSON-lines\n(session mode)"| F["Agent / CI"]
+```
+                    ┌─────────────────┐
+                    │  Child Process   │
+                    │   (your TUI)     │
+                    └────────▲─────────┘
+                        stdin/stdout
+                    ┌────────┴─────────┐
+termscope CLI ───► │       PTY        │
+                    └────────┬─────────┘
+                         byte stream
+                    ┌────────▼─────────┐
+                    │    ghostty-vt     │
+                    │ Terminal Emulator │
+                    └────────┬─────────┘
+                        screen state
+                    ┌────────▼─────────┐
+                    │     Snapshot      │
+                    │ text/json/svg/html│
+                    └──────────────────┘
 ```
 
 ## Quick Start
