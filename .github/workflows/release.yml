@@ -8,6 +8,9 @@ on:
 permissions:
   contents: write
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     strategy:
@@ -20,7 +23,7 @@ jobs:
             os: ubuntu-latest
             cross: true
           - target: x86_64-macos
-            os: macos-13
+            os: macos-15-intel
             cross: false
           - target: aarch64-macos
             os: macos-latest
