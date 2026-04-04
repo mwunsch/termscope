@@ -1,5 +1,9 @@
 # termscope
 
+[![License: MPL-2.0](https://img.shields.io/badge/license-MPL--2.0-blue.svg)](LICENSE)
+[![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20macOS-green.svg)](#install)
+[![Zig 0.15.x](https://img.shields.io/badge/zig-0.15.x-f7a41d.svg)](https://ziglang.org)
+
 Headless terminal emulator CLI — **Playwright for the terminal.**
 
 termscope spawns a command in a virtual terminal powered by [libghostty-vt](https://ghostty.org), lets you interact with it programmatically, and captures the terminal state. Built for AI agents, CI pipelines, and TUI testing.
@@ -10,12 +14,25 @@ termscope spawns a command in a virtual terminal powered by [libghostty-vt](http
 curl -fsSL https://raw.githubusercontent.com/mwunsch/termscope/main/install.sh | sh
 ```
 
+Supports **Linux** (x86_64, aarch64) and **macOS** (x86_64, Apple Silicon).
+
 Or build from source (requires [Zig 0.15.x](https://ziglang.org)):
 
 ```bash
 git clone https://github.com/mwunsch/termscope.git
 cd termscope
 zig build -Doptimize=ReleaseSafe
+```
+
+## How It Works
+
+```mermaid
+flowchart LR
+    A["termscope CLI"] -->|forkpty| B["PTY"]
+    B -->|stdin/stdout| C["Child Process\n(your TUI)"]
+    B -->|byte stream| D["ghostty-vt\nTerminal Emulator"]
+    D -->|screen state| E["Snapshot\ntext / json / svg / html"]
+    A -->|"JSON-lines\n(session mode)"| F["Agent / CI"]
 ```
 
 ## Quick Start
