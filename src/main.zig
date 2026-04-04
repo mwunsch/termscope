@@ -199,41 +199,8 @@ fn runSnapshot(
     // Wait for idle
     wait_mod.waitForIdle(&pty, &term, cfg.wait_idle_ms) catch {};
 
-    // Capture snapshot
-    var snap = snapshot_mod.capture(&term, allocator) catch |err| {
-        try stderr.print("termscope snapshot: failed to capture: {}\n", .{err});
-        try stderr.flush();
-        std.process.exit(1);
-    };
-    defer snap.deinit();
-
     // Render in the requested format
-    const output = switch (format) {
-        .text => snapshot_mod.renderText(&snap, allocator),
-        .spans => snapshot_mod.renderSpans(&snap, allocator),
-        .json => snapshot_mod.renderJson(&snap, allocator),
-        .html => blk: {
-            const html = render_html.render(&term, allocator) catch |err| {
-                try stderr.print("termscope snapshot: failed to render html: {}\n", .{err});
-                try stderr.flush();
-                std.process.exit(1);
-            };
-            break :blk @as(std.mem.Allocator.Error![]u8, html);
-        },
-        .svg => blk: {
-            const svg = render_svg.render(&term, allocator) catch |err| {
-                try stderr.print("termscope snapshot: failed to render svg: {}\n", .{err});
-                try stderr.flush();
-                std.process.exit(1);
-            };
-            break :blk @as(std.mem.Allocator.Error![]u8, svg);
-        },
-        else => {
-            try stderr.print("termscope snapshot: format not yet implemented\n", .{});
-            try stderr.flush();
-            std.process.exit(1);
-        },
-    } catch |err| {
+    const output = renderForFormat(format, &term, allocator, stderr) catch |err| {
         try stderr.print("termscope snapshot: failed to render: {}\n", .{err});
         try stderr.flush();
         std.process.exit(1);
@@ -271,6 +238,7 @@ fn runExec(
     var cmd_args: ?[]const []const u8 = null;
     var steps: std.ArrayList(ExecStep) = .{};
     defer steps.deinit(allocator);
+    var exec_format: snapshot_mod.Format = .text;
 
     var i: usize = 0;
     while (i < args.len) : (i += 1) {
@@ -280,24 +248,24 @@ fn runExec(
             break;
         } else if (std.mem.eql(u8, arg, "--wait-for-text")) {
             i += 1;
-            if (i < args.len) try steps.append(allocator,.{ .wait_for_text = args[i] });
+            if (i < args.len) try steps.append(allocator, .{ .wait_for_text = args[i] });
         } else if (std.mem.eql(u8, arg, "--type")) {
             i += 1;
-            if (i < args.len) try steps.append(allocator,.{ .type_text = args[i] });
+            if (i < args.len) try steps.append(allocator, .{ .type_text = args[i] });
         } else if (std.mem.eql(u8, arg, "--press")) {
             i += 1;
-            if (i < args.len) try steps.append(allocator,.{ .press = args[i] });
+            if (i < args.len) try steps.append(allocator, .{ .press = args[i] });
         } else if (std.mem.eql(u8, arg, "--wait-idle")) {
             i += 1;
             if (i < args.len) {
                 const ms = std.fmt.parseInt(u32, args[i], 10) catch cfg.wait_idle_ms;
-                try steps.append(allocator,.{ .wait_idle = ms });
+                try steps.append(allocator, .{ .wait_idle = ms });
             }
         } else if (std.mem.eql(u8, arg, "--snapshot")) {
-            try steps.append(allocator,.snapshot);
+            try steps.append(allocator, .snapshot);
         } else if (std.mem.eql(u8, arg, "--expect")) {
             i += 1;
-            if (i < args.len) try steps.append(allocator,.{ .expect = args[i] });
+            if (i < args.len) try steps.append(allocator, .{ .expect = args[i] });
         } else if (std.mem.eql(u8, arg, "--timeout")) {
             i += 1;
             if (i < args.len) {
@@ -305,7 +273,7 @@ fn runExec(
             }
         } else if (std.mem.eql(u8, arg, "--format") or std.mem.eql(u8, arg, "-f")) {
             i += 1;
-            // format is consumed but applied to snapshot steps
+            if (i < args.len) exec_format = parseFormat(args[i]);
         }
     }
 
@@ -384,19 +352,11 @@ fn runExec(
             },
             .snapshot => {
                 wait_mod.drainPty(&pty, &term);
-                var snap = snapshot_mod.capture(&term, allocator) catch |err| {
-                    try stderr.print("termscope exec: snapshot failed: {}\n", .{err});
-                    try stderr.flush();
+                const output = renderForFormat(exec_format, &term, allocator, stderr) catch {
                     std.process.exit(1);
                 };
-                defer snap.deinit();
-                const text = snapshot_mod.renderText(&snap, allocator) catch |err| {
-                    try stderr.print("termscope exec: render failed: {}\n", .{err});
-                    try stderr.flush();
-                    std.process.exit(1);
-                };
-                defer allocator.free(text);
-                try stdout.writeAll(text);
+                defer allocator.free(output);
+                try stdout.writeAll(output);
                 try stdout.flush();
             },
             .expect => |pattern| {
@@ -423,6 +383,31 @@ const ExecStep = union(enum) {
     snapshot,
     expect: []const u8,
 };
+
+/// Render terminal state in the given format. Used by snapshot, exec, and session.
+fn renderForFormat(
+    format: snapshot_mod.Format,
+    term: *Terminal,
+    allocator: std.mem.Allocator,
+    stderr: *std.Io.Writer,
+) ![]u8 {
+    switch (format) {
+        .text, .spans, .json => {
+            var snap = try snapshot_mod.capture(term, allocator);
+            defer snap.deinit();
+            return switch (format) {
+                .text => snapshot_mod.renderText(&snap, allocator),
+                .spans => snapshot_mod.renderSpans(&snap, allocator),
+                .json => snapshot_mod.renderJson(&snap, allocator),
+                else => unreachable,
+            };
+        },
+        .html => return render_html.render(term, allocator),
+        .svg => return render_svg.render(term, allocator),
+        .ansi => return term.formatVt(allocator),
+    }
+    _ = stderr;
+}
 
 fn parseFormat(s: []const u8) snapshot_mod.Format {
     if (std.mem.eql(u8, s, "text")) return .text;

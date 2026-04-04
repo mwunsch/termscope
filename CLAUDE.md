@@ -72,3 +72,8 @@ The terminal module wraps these key ghostty functions:
 - Zig 0.15.x API: `std.ArrayList` is unmanaged (pass allocator to each call), `std.fs.File.stdout()` returns `File`, `writer()` needs a buffer, use `.interface` for formatted printing.
 - PTY output → terminal via `feed()`, terminal queries via `getCursor()`, `getTitle()`, `isAltScreen()`, `formatPlainText()`.
 - Session protocol: JSON-lines on stdin/stdout, stderr for diagnostics only.
+- `renderForFormat` in main.zig and session.zig is the shared rendering path for all formats.
+
+## Deferred
+
+- `--palette` flag: parsed in config but not wired to ghostty's color palette API. Named palettes (solarized-dark, catppuccin-mocha, etc.) are defined in the enum but have no effect yet.

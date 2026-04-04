@@ -9,6 +9,8 @@ const Terminal = terminal_mod.Terminal;
 const input_mod = @import("input.zig");
 const snapshot_mod = @import("snapshot.zig");
 const wait_mod = @import("wait.zig");
+const render_svg = @import("render_svg.zig");
+const render_html = @import("render_html.zig");
 
 /// Run a session: read JSON-line requests from stdin, dispatch, write responses to stdout.
 pub fn run(
@@ -203,50 +205,84 @@ fn processRequest(
 fn handleSnapshot(id: i64, params: ?std.json.Value, pty: *Pty, term: *Terminal, allocator: std.mem.Allocator, stdout: *std.Io.Writer) !void {
     wait_mod.drainPty(pty, term);
 
-    var format_str: []const u8 = "text";
-    if (params) |p| {
-        if (p == .object) {
-            if (p.object.get("format")) |f| {
-                if (f == .string) format_str = f.string;
-            }
-        }
-    }
+    const format = parseFormat(getStringParam(params, "format") orelse "text");
 
-    var snap = try snapshot_mod.capture(term, allocator);
-    defer snap.deinit();
-
-    if (std.mem.eql(u8, format_str, "json")) {
+    // For json format, the result IS the json — embed directly
+    if (format == .json) {
+        var snap = try snapshot_mod.capture(term, allocator);
+        defer snap.deinit();
         const json_out = try snapshot_mod.renderJson(&snap, allocator);
         defer allocator.free(json_out);
         try stdout.print("{{\"id\":{d},\"result\":{s}}}\n", .{ id, json_out });
-    } else {
-        const text = try snapshot_mod.renderText(&snap, allocator);
-        defer allocator.free(text);
-        // Escape the text for JSON
-        var escaped: std.ArrayList(u8) = .{};
-        defer escaped.deinit(allocator);
-        const ew = escaped.writer(allocator);
-        for (text) |ch| {
-            switch (ch) {
-                '"' => try ew.writeAll("\\\""),
-                '\\' => try ew.writeAll("\\\\"),
-                '\n' => try ew.writeAll("\\n"),
-                '\r' => try ew.writeAll("\\r"),
-                '\t' => try ew.writeAll("\\t"),
-                else => {
-                    if (ch < 0x20) {
-                        try ew.print("\\u{x:0>4}", .{ch});
-                    } else {
-                        try ew.writeByte(ch);
-                    }
-                },
-            }
-        }
-        try stdout.print("{{\"id\":{d},\"result\":{{\"cols\":{d},\"rows\":{d},\"cursor\":[{d},{d}],\"screen\":\"{s}\",\"title\":\"{s}\",\"text\":\"{s}\"}}}}\n", .{
-            id, snap.cols, snap.rows, snap.cursor_row, snap.cursor_col, snap.screen, snap.title, escaped.items,
-        });
+        try stdout.flush();
+        return;
     }
+
+    // For all other formats, render then wrap as a JSON string
+    const content = renderForFormat(format, term, allocator) catch |err| {
+        try stdout.print("{{\"id\":{d},\"error\":{{\"code\":\"render_error\",\"message\":\"failed to render: {}\"}}}}\n", .{ id, err });
+        try stdout.flush();
+        return;
+    };
+    defer allocator.free(content);
+
+    // JSON-escape the content
+    var escaped: std.ArrayList(u8) = .{};
+    defer escaped.deinit(allocator);
+    const ew = escaped.writer(allocator);
+    for (content) |ch| {
+        switch (ch) {
+            '"' => try ew.writeAll("\\\""),
+            '\\' => try ew.writeAll("\\\\"),
+            '\n' => try ew.writeAll("\\n"),
+            '\r' => try ew.writeAll("\\r"),
+            '\t' => try ew.writeAll("\\t"),
+            else => {
+                if (ch < 0x20) {
+                    try ew.print("\\u{x:0>4}", .{ch});
+                } else {
+                    try ew.writeByte(ch);
+                }
+            },
+        }
+    }
+
+    try stdout.print("{{\"id\":{d},\"result\":{{\"format\":\"{s}\",\"content\":\"{s}\"}}}}\n", .{
+        id, @tagName(format), escaped.items,
+    });
     try stdout.flush();
+}
+
+fn renderForFormat(format: snapshot_mod.Format, term: *Terminal, allocator: std.mem.Allocator) ![]u8 {
+    return switch (format) {
+        .text, .spans => blk: {
+            var snap = try snapshot_mod.capture(term, allocator);
+            defer snap.deinit();
+            break :blk switch (format) {
+                .text => snapshot_mod.renderText(&snap, allocator),
+                .spans => snapshot_mod.renderSpans(&snap, allocator),
+                else => unreachable,
+            };
+        },
+        .json => blk: {
+            var snap = try snapshot_mod.capture(term, allocator);
+            defer snap.deinit();
+            break :blk snapshot_mod.renderJson(&snap, allocator);
+        },
+        .html => render_html.render(term, allocator),
+        .svg => render_svg.render(term, allocator),
+        .ansi => term.formatVt(allocator),
+    };
+}
+
+fn parseFormat(s: []const u8) snapshot_mod.Format {
+    if (std.mem.eql(u8, s, "text")) return .text;
+    if (std.mem.eql(u8, s, "spans")) return .spans;
+    if (std.mem.eql(u8, s, "json")) return .json;
+    if (std.mem.eql(u8, s, "svg")) return .svg;
+    if (std.mem.eql(u8, s, "html")) return .html;
+    if (std.mem.eql(u8, s, "ansi")) return .ansi;
+    return .text;
 }
 
 fn handleType(id: i64, params: ?std.json.Value, pty: *Pty, stdout: *std.Io.Writer) !void {

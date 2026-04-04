@@ -199,6 +199,11 @@ pub const Terminal = struct {
         return self.formatWith(gt.GHOSTTY_FORMATTER_FORMAT_HTML, allocator);
     }
 
+    /// Format terminal content as VT escape sequences (ANSI).
+    pub fn formatVt(self: *Terminal, allocator: std.mem.Allocator) ![]u8 {
+        return self.formatWith(gt.GHOSTTY_FORMATTER_FORMAT_VT, allocator);
+    }
+
     fn formatWith(self: *Terminal, format: c_uint, allocator: std.mem.Allocator) ![]u8 {
         var opts: gt.GhosttyFormatterTerminalOptions = std.mem.zeroes(gt.GhosttyFormatterTerminalOptions);
         opts.size = @sizeOf(gt.GhosttyFormatterTerminalOptions);
