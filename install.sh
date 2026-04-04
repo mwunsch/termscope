@@ -60,26 +60,41 @@ for page in "$TMPDIR/$NAME"/man/*; do
   echo "  $(basename "$page") -> $dest/"
 done
 
-# Install agent skill if Claude Code is present
-SKILL_DIR="$HOME/.claude/skills/termscope"
+# Install agent skills
+SKILL_SOURCE="$TMPDIR/$NAME/SKILL.md"
+SKILL_PATHS=""
+
+echo "Installing agent skills..."
+
 if [ -d "$HOME/.claude" ]; then
-  echo "Installing agent skill..."
-  install -d "$SKILL_DIR"
-  install -m 644 "$TMPDIR/$NAME/SKILL.md" "$SKILL_DIR/SKILL.md"
-  echo "  SKILL.md -> $SKILL_DIR/"
+  DEST="$HOME/.claude/skills/termscope"
+  install -d "$DEST"
+  install -m 644 "$SKILL_SOURCE" "$DEST/SKILL.md"
+  SKILL_PATHS="$SKILL_PATHS\n  $DEST/SKILL.md"
+fi
+
+if [ -d "$HOME/.codex" ] || [ -d "$HOME/.agents" ]; then
+  DEST="$HOME/.agents/skills/termscope"
+  install -d "$DEST"
+  install -m 644 "$SKILL_SOURCE" "$DEST/SKILL.md"
+  SKILL_PATHS="$SKILL_PATHS\n  $DEST/SKILL.md"
 fi
 
 echo ""
 echo "Done! Installed termscope $TAG"
 echo "  Binary:    $INSTALL_DIR/termscope"
 echo "  Man pages: $MAN_BASE/"
-[ -d "$SKILL_DIR" ] && echo "  Skill:     $SKILL_DIR/SKILL.md"
+if [ -n "$SKILL_PATHS" ]; then
+  printf "  Skills:%b\n" "$SKILL_PATHS"
+fi
 echo ""
 echo "Run 'termscope --version' to verify."
+echo "For other agents: npx skills add mwunsch/termscope"
 
 # Check if INSTALL_DIR is in PATH
 case ":$PATH:" in
   *":$INSTALL_DIR:"*) ;;
-  *) echo "Note: $INSTALL_DIR is not in your PATH. Add it with:" >&2
+  *) echo ""
+     echo "Note: $INSTALL_DIR is not in your PATH. Add it with:" >&2
      echo "  export PATH=\"$INSTALL_DIR:\$PATH\"" >&2 ;;
 esac
