@@ -15,12 +15,16 @@ jobs:
         include:
           - target: x86_64-linux
             os: ubuntu-latest
+            cross: false
           - target: aarch64-linux
             os: ubuntu-latest
+            cross: true
           - target: x86_64-macos
-            os: macos-latest
+            os: macos-13
+            cross: false
           - target: aarch64-macos
             os: macos-latest
+            cross: false
 
     runs-on: ${{ matrix.os }}
 
@@ -33,7 +37,12 @@ jobs:
           version: 0.15.2
 
       - name: Build
-        run: zig build -Dtarget=${{ matrix.target }} -Doptimize=ReleaseSafe -Dversion=${GITHUB_REF_NAME#v}
+        run: |
+          BUILD_ARGS="-Doptimize=ReleaseSafe -Dversion=${GITHUB_REF_NAME#v}"
+          if [ "${{ matrix.cross }}" = "true" ]; then
+            BUILD_ARGS="-Dtarget=${{ matrix.target }} $BUILD_ARGS"
+          fi
+          zig build $BUILD_ARGS
 
       - name: Package
         run: |

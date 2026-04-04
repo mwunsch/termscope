@@ -3,8 +3,13 @@ const posix = std.posix;
 const config_mod = @import("config.zig");
 const Config = config_mod.Config;
 
+const builtin = @import("builtin");
 const c = @cImport({
-    @cInclude("util.h");
+    if (builtin.os.tag == .linux) {
+        @cInclude("pty.h");
+    } else {
+        @cInclude("util.h");
+    }
     @cInclude("sys/ioctl.h");
     @cInclude("signal.h");
 });
