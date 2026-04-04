@@ -12,7 +12,7 @@ metadata:
 
 # termscope
 
-Drive and inspect terminal applications — Playwright for the terminal.
+Drive and inspect terminal applications using a headless terminal emulator powered by libghostty-vt.
 
 ## Prerequisites
 
