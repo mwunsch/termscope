@@ -1,8 +1,8 @@
 # termscope
 
-Headless terminal emulator CLI — **Playwright for the terminal.**
+Headless terminal emulator CLI powered by [libghostty-vt](https://ghostty.org).
 
-termscope spawns a command in a virtual terminal powered by [libghostty-vt](https://ghostty.org), lets you interact with it programmatically, and captures the terminal state. Built for AI agents, CI pipelines, and TUI testing.
+Spawn any command in a real virtual terminal, interact with it programmatically, and capture the state — all from a single binary with zero runtime dependencies. Built for AI agents, CI pipelines, and TUI testing. Inspired by [Playwright](https://playwright.dev)-style automation, but for the terminal.
 
 ## Install
 
