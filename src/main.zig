@@ -63,29 +63,8 @@ pub fn main() !void {
             try printUsage(&stdout.interface);
             try stdout.interface.flush();
             return;
-        } else if (std.mem.eql(u8, arg, "--cols")) {
-            i += 1;
-            if (i < args.len) cfg.cols = std.fmt.parseInt(u16, args[i], 10) catch 0;
-        } else if (std.mem.eql(u8, arg, "--rows")) {
-            i += 1;
-            if (i < args.len) cfg.rows = std.fmt.parseInt(u16, args[i], 10) catch 0;
-        } else if (std.mem.eql(u8, arg, "--term")) {
-            i += 1;
-            if (i < args.len) cfg.term = args[i];
-        } else if (std.mem.eql(u8, arg, "--theme")) {
-            i += 1;
-            if (i < args.len) {
-                if (std.mem.eql(u8, args[i], "light")) cfg.theme = .light;
-            }
-        } else if (std.mem.eql(u8, arg, "--inherit-env")) {
-            cfg.inherit_env = true;
-        } else if (std.mem.eql(u8, arg, "--env")) {
-            i += 1;
-            if (i < args.len) {
-                if (std.mem.indexOf(u8, args[i], "=")) |eq_pos| {
-                    cfg.addEnvOverride(args[i][0..eq_pos], args[i][eq_pos + 1 ..]);
-                }
-            }
+        } else if (tryParseGlobalFlag(arg, args, &i, &cfg)) {
+            // handled
         } else {
             cmd_start = i;
             break;
@@ -105,13 +84,15 @@ pub fn main() !void {
     } else if (std.mem.eql(u8, subcommand, "exec")) {
         try runExec(args[cmd_start + 1 ..], &cfg, allocator, &stdout.interface, &stderr.interface);
     } else if (std.mem.eql(u8, subcommand, "session")) {
-        // Find command after --
+        // Parse flags and find command after --
         var session_cmd: ?[]const []const u8 = null;
         var j: usize = cmd_start + 1;
         while (j < args.len) : (j += 1) {
             if (std.mem.eql(u8, args[j], "--")) {
                 session_cmd = args[j + 1 ..];
                 break;
+            } else if (tryParseGlobalFlag(args[j], args, &j, &cfg)) {
+                // handled
             }
         }
         const cmd = session_cmd orelse {
@@ -154,6 +135,8 @@ fn runSnapshot(
         } else if (std.mem.eql(u8, arg, "--")) {
             cmd_args = args[i + 1 ..];
             break;
+        } else if (tryParseGlobalFlag(arg, args, &i, cfg)) {
+            // handled
         }
     }
 
@@ -274,6 +257,8 @@ fn runExec(
         } else if (std.mem.eql(u8, arg, "--format") or std.mem.eql(u8, arg, "-f")) {
             i += 1;
             if (i < args.len) exec_format = parseFormat(args[i]);
+        } else if (tryParseGlobalFlag(arg, args, &i, cfg)) {
+            // handled
         }
     }
 
@@ -407,6 +392,46 @@ fn renderForFormat(
         .ansi => return term.formatVt(allocator),
     }
     _ = stderr;
+}
+
+/// Parse a global flag (e.g. --cols, --rows, --term, --theme, --env, --inherit-env).
+/// These flags are accepted both before and after the subcommand name. Returns
+/// true if `arg` was a recognized global flag (and advances `i` past any value).
+fn tryParseGlobalFlag(
+    arg: []const u8,
+    args: []const []const u8,
+    i: *usize,
+    cfg: *Config,
+) bool {
+    if (std.mem.eql(u8, arg, "--cols")) {
+        i.* += 1;
+        if (i.* < args.len) cfg.cols = std.fmt.parseInt(u16, args[i.*], 10) catch 0;
+        return true;
+    } else if (std.mem.eql(u8, arg, "--rows")) {
+        i.* += 1;
+        if (i.* < args.len) cfg.rows = std.fmt.parseInt(u16, args[i.*], 10) catch 0;
+        return true;
+    } else if (std.mem.eql(u8, arg, "--term")) {
+        i.* += 1;
+        if (i.* < args.len) cfg.term = args[i.*];
+        return true;
+    } else if (std.mem.eql(u8, arg, "--theme")) {
+        i.* += 1;
+        if (i.* < args.len and std.mem.eql(u8, args[i.*], "light")) cfg.theme = .light;
+        return true;
+    } else if (std.mem.eql(u8, arg, "--inherit-env")) {
+        cfg.inherit_env = true;
+        return true;
+    } else if (std.mem.eql(u8, arg, "--env")) {
+        i.* += 1;
+        if (i.* < args.len) {
+            if (std.mem.indexOf(u8, args[i.*], "=")) |eq_pos| {
+                cfg.addEnvOverride(args[i.*][0..eq_pos], args[i.*][eq_pos + 1 ..]);
+            }
+        }
+        return true;
+    }
+    return false;
 }
 
 fn parseFormat(s: []const u8) snapshot_mod.Format {
